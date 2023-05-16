@@ -217,7 +217,7 @@ class Trainer:
 
             if save:
                 for j in range(Y.shape[0]):
-                    np.save(os.path.join(f, f'test_predictions_{k}.npy'),
+                    np.save(os.path.join(f, f'test_predictions_{k:06d}.npy'),
                             Y[j].detach().cpu().numpy())
                     k += 1
 
