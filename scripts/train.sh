@@ -12,4 +12,4 @@
 #SBATCH --mail-type=all        	     # send email 
 #SBATCH --mail-user=stock@colostate.edu
 
-apptainer exec --cleanenv --nv --bind /home/jstock:/home/jstock --bind /rdma/dgx-a100/jstock:/home/jstock/data /home/jstock/apptainer/DRIVE_PYTORCH/code_server_pytorch.sif /home/jstock/miniconda/envs/dev/bin/python ../src/main.py -m vit --cuda --epochs 100 -b 24 --workers 8 --data-dir /home/jstock/data/conus3/A/ --h-depth 4 --h-heads 8
+apptainer exec --cleanenv --nv --bind /home/jstock:/home/jstock --bind /rdma/dgx-a100/jstock:/home/jstock/data /home/jstock/apptainer/DRIVE_PYTORCH/code_server_pytorch.sif /home/jstock/miniconda/envs/dev/bin/python ../src/main.py -m vit --cuda --epochs 100 -b 24 --workers 8 --data-dir /home/jstock/data/conus3/A --h-depth 4 --h-heads 8
