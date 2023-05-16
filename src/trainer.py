@@ -198,7 +198,9 @@ class Trainer:
         metrics = AverageMeter(Summary.AVERAGE)
 
         if save:
-            Ys = []
+            f = os.path.join(self.data_dir, 'out', self.model_name)
+            os.makedirs(f, exist_ok=True)
+            k = 0
 
         self.model.eval()
         for i, (X, T) in enumerate(val_loader):
@@ -214,7 +216,10 @@ class Trainer:
             metrics.update(rmse.item(), X.size()[0])
 
             if save:
-                Ys.append(Y.detach().cpu())
+                for j in range(Y.shape[0]):
+                    np.save(os.path.join(f, f'test_predictions_{k}.npy'),
+                            Y[j].detach().cpu().numpy())
+                    k += 1
 
         if self.distributed:
             losses.all_reduce()
@@ -225,13 +230,6 @@ class Trainer:
                 f"[*] test loss: {losses.avg:.3f} - "
                 f"test met: {metrics.avg:.3f}"
             )
-
-        if save:
-            Ys = torch.cat(Ys).numpy()
-            # save predictions as numpy array
-            f = os.path.join(self.data_dir, 'out', self.model_name)
-            os.makedirs(f, exist_ok=True)
-            np.save(os.path.join(f, f'test_predictions.npy'), Ys)
 
         return losses.avg, metrics.avg
 
