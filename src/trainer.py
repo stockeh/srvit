@@ -154,8 +154,8 @@ class Trainer:
 
             # min < float(inf), max > 0
             is_best = val_metric < self.best_val_metric
-            msg1 = "train loss: {:.3f} - train met: {:.3f} "
-            msg2 = "- val loss: {:.3f} - val met: {:.3f}"
+            msg1 = "train loss: {:.5f} - train met: {:.5f} "
+            msg2 = "- val loss: {:.5f} - val met: {:.5f}"
             if is_best:
                 self.new_epoch_counter = 0
                 msg2 += " [*]"
@@ -227,8 +227,8 @@ class Trainer:
 
         if test:
             print(
-                f"[*] test loss: {losses.avg:.3f} - "
-                f"test met: {metrics.avg:.3f}"
+                f"[*] test loss: {losses.avg:.5f} - "
+                f"test met: {metrics.avg:.5f}"
             )
 
         return losses.avg, metrics.avg
