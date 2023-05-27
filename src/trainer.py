@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from vit.model import ViT
+from smoother.model import Smoother
 
 from utils import AverageMeter, Summary
 
@@ -22,6 +23,14 @@ class Trainer:
                              mlp_dim=args.h_mlp_dim, dim_head=args.h_dim_head)
         else:
             raise NotImplementedError
+
+        if args.finetune:
+            print(f'=> Finetuning {args.backbone}')
+            if not args.test:
+                self._load_checkpoint(backbone=args.backbone)
+            self.model = Smoother(
+                in_chans=self.model.out_chans, out_chans=self.model.out_chans,
+                backbone=self.model, hiddens=args.finetune_hiddens)
 
         self.multiprocessing_distributed = args.multiprocessing_distributed
         self.ngpus_per_node = args.ngpus_per_node
@@ -79,8 +88,11 @@ class Trainer:
         self.best_val_metric = float('inf')
         self.train_patience = args.train_patience
         self.resume = args.resume
-        self.model_name = args.model_name
         self.best = args.best
+        self.experiment = args.experiment
+        self.finetune = args.finetune
+        self.model_name = args.model_name
+        self.backbone = args.backbone
         self.ckpt_dir = args.ckpt_dir
         self.data_dir = args.data_dir
 
@@ -238,16 +250,17 @@ class Trainer:
         If this model has reached the best validation accuracy thus
         far, a seperate file with the suffix `best` is created.
         """
-        filename = self.model_name + "_ckpt.pth.tar"
+        pre = self.experiment + (f'_finetune_' if self.finetune else '_')
+        filename = pre + self.model_name + "_ckpt.pth.tar"
         ckpt_path = os.path.join(self.ckpt_dir, filename)
         os.makedirs(self.ckpt_dir, exist_ok=True)
 
         torch.save(state, ckpt_path)
         if is_best:
-            filename = self.model_name + "_model_best.pth.tar"
+            filename = pre + self.model_name + "_model_best.pth.tar"
             shutil.copyfile(ckpt_path, os.path.join(self.ckpt_dir, filename))
 
-    def _load_checkpoint(self, best=False):
+    def _load_checkpoint(self, best=False, backbone=None):
         """Load the best copy of a model.
         This is useful for 2 cases:
         - Resuming training with the most recent model checkpoint.
@@ -259,10 +272,15 @@ class Trainer:
                 case the most recent version of the checkpoint
                 is used.
         """
-        if best:
-            filename = self.model_name + "_model_best.pth.tar"
+        if backbone is not None:
+            filename = backbone
+            best = True if 'best' in backbone else False
         else:
-            filename = self.model_name + "_ckpt.pth.tar"
+            pre = self.experiment + (f'_finetune_' if self.finetune else '_')
+            if best:
+                filename = pre + self.model_name + "_model_best.pth.tar"
+            else:
+                filename = pre + self.model_name + "_ckpt.pth.tar"
 
         ckpt_path = os.path.join(self.ckpt_dir, filename)
 

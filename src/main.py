@@ -14,6 +14,9 @@ import dataloader
 
 parser = argparse.ArgumentParser(description='PyTorch GREMLIN Attention')
 
+parser.add_argument('-e', '--experiment', required=True, type=str,
+                    help='Experiment name [must be unique]')
+
 # Model configuration
 parser.add_argument('-m', '--model_name', required=True, type=str,
                     help='Name of model to use')
@@ -43,6 +46,17 @@ parser.add_argument('--h-mlp-dim', default=512, type=int, metavar='N',
                     help='mlp dimension m, e.g., n x d -> n x m -> n x d')
 parser.add_argument('--h-dim-head', default=64, type=int, metavar='N',
                     help='inner dimension of q,k,v b, e.g. n x d -> n x b -> n x d')
+
+# Finetuning configuration
+parser.add_argument('--finetune', action='store_true',  # default false
+                    help='Train with finetuning')
+parser.add_argument('--backbone', type=str,
+                    default='Name of model, e.g., model.pth.tar',
+                    help='PyTorch model to load as backbone to finetuning')
+parser.add_argument('--finetune-hiddens', nargs='+',
+                    help='Convolutional filters to add to fine-tuning '
+                    'model as a list of integers, e.g. 32 64 128. '
+                    'If not specified, no additional layers will be added')
 
 # Distributed configuration
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
