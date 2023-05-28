@@ -299,7 +299,7 @@ class Trainer:
             ckpt = torch.load(ckpt_path, map_location=loc)
 
         # load variables from checkpoint
-        if backbone is not None:
+        if backbone is None:
             self.start_epoch = ckpt["epoch"]
             self.best_val_metric = ckpt["best_val_metric"]
             self.optimizer.load_state_dict(ckpt["optim_state"])
