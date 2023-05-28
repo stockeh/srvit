@@ -24,13 +24,14 @@ class Trainer:
         else:
             raise NotImplementedError
 
-        if args.finetune:
-            print(f'=> Finetuning {args.backbone}')
-            if not args.test:
-                self._load_checkpoint(backbone=args.backbone)
-            self.model = Smoother(
-                in_chans=self.model.out_chans, out_chans=self.model.out_chans,
-                backbone=self.model, hiddens=args.finetune_hiddens)
+        self.resume = args.resume
+        self.best = args.best
+        self.experiment = args.experiment
+        self.finetune = args.finetune
+        self.model_name = args.model_name
+        self.backbone = args.backbone
+        self.ckpt_dir = args.ckpt_dir
+        self.data_dir = args.data_dir
 
         self.multiprocessing_distributed = args.multiprocessing_distributed
         self.ngpus_per_node = args.ngpus_per_node
@@ -38,6 +39,14 @@ class Trainer:
         self.distributed = args.distributed
         self.device = torch.device(args.device)
         self.gpu = args.gpu
+
+        if args.finetune:
+            print(f'=> Finetuning {args.backbone}')
+            if not args.test:
+                self._load_checkpoint(backbone=args.backbone)
+            self.model = Smoother(
+                in_chans=self.model.out_chans, out_chans=self.model.out_chans,
+                backbone=self.model, hiddens=args.finetune_hiddens)
 
         if self.distributed and args.device == 'cuda':
             # For multiprocessing distributed, DistributedDataParallel constructor
@@ -87,14 +96,6 @@ class Trainer:
         self.new_epoch_counter = 0
         self.best_val_metric = float('inf')
         self.train_patience = args.train_patience
-        self.resume = args.resume
-        self.best = args.best
-        self.experiment = args.experiment
-        self.finetune = args.finetune
-        self.model_name = args.model_name
-        self.backbone = args.backbone
-        self.ckpt_dir = args.ckpt_dir
-        self.data_dir = args.data_dir
 
     def summary(self):
         print(self.model)
@@ -298,10 +299,12 @@ class Trainer:
             ckpt = torch.load(ckpt_path, map_location=loc)
 
         # load variables from checkpoint
-        self.start_epoch = ckpt["epoch"]
-        self.best_val_metric = ckpt["best_val_metric"]
+        if backbone is not None:
+            self.start_epoch = ckpt["epoch"]
+            self.best_val_metric = ckpt["best_val_metric"]
+            self.optimizer.load_state_dict(ckpt["optim_state"])
+
         self.model.load_state_dict(ckpt["model_state"])
-        self.optimizer.load_state_dict(ckpt["optim_state"])
 
         if best:
             print(
