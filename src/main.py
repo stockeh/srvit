@@ -32,6 +32,8 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training')
 parser.add_argument('--train_patience', type=int, default=50,
                     help='Patience for early stopping')
+parser.add_argument('-l', '--loss', type=str,
+                    help='Loss function to use [genexp|mse]')
 
 # Hyperparameter configuration
 parser.add_argument('--h-patch', default=16, type=int, metavar='N',
@@ -48,6 +50,8 @@ parser.add_argument('--h-dim-head', default=64, type=int, metavar='N',
                     help='inner dimension of q,k,v b, e.g. n x d -> n x b -> n x d')
 
 # Finetuning configuration
+parser.add_argument('--complete', action='store_true',  # default false
+                    help='Train complete model')
 parser.add_argument('--finetune', action='store_true',  # default false
                     help='Train with finetuning')
 parser.add_argument('--backbone', type=str,

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
 
-from pytorch_msssim import MS_SSIM, SSIM
+# from pytorch_msssim import MS_SSIM, SSIM
 
 
 class Lion(Optimizer):
@@ -93,24 +93,24 @@ class MSEGenexp(nn.Module):
             torch.square(torch.subtract(Y, T))))
 
 
-class SSIMMSE(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.mse = nn.MSELoss()
-        self.ssim = SSIM(data_range=1.0, size_average=True, channel=1)
+# class SSIMMSE(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.mse = nn.MSELoss()
+#         self.ssim = SSIM(data_range=1.0, size_average=True, channel=1)
 
-    def forward(self, Y, T):
-        mse = self.mse(Y, T)
-        ssim = 1-self.ssim(Y, T)
-        return mse + 0.1*ssim
-
-
-# SSIM_Loss(data_range=1.0, size_average=True, channel=1)
-class MS_SSIM_Loss(MS_SSIM):
-    def forward(self, Y, T):
-        return nn.MSELoss.forward(Y, T) + 0.01*(1 - super(MS_SSIM_Loss, self).forward(Y, T))
+#     def forward(self, Y, T):
+#         mse = self.mse(Y, T)
+#         ssim = 1-self.ssim(Y, T)
+#         return mse + 0.1*ssim
 
 
-class SSIM_Loss(SSIM):
-    def forward(self, Y, T):
-        return 100*(1 - super(SSIM_Loss, self).forward(Y, T))
+# # SSIM_Loss(data_range=1.0, size_average=True, channel=1)
+# class MS_SSIM_Loss(MS_SSIM):
+#     def forward(self, Y, T):
+#         return nn.MSELoss.forward(Y, T) + 0.01*(1 - super(MS_SSIM_Loss, self).forward(Y, T))
+
+
+# class SSIM_Loss(SSIM):
+#     def forward(self, Y, T):
+#         return 100*(1 - super(SSIM_Loss, self).forward(Y, T))

@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from vit.model import ViT
 from smoother.model import Smoother
-
+from common import MSEGenexp
 from utils import AverageMeter, Summary
 
 
@@ -28,6 +28,7 @@ class Trainer:
         self.best = args.best
         self.experiment = args.experiment
         self.finetune = args.finetune
+        self.complete = args.complete
         self.model_name = args.model_name
         self.backbone = args.backbone
         self.ckpt_dir = args.ckpt_dir
@@ -37,47 +38,25 @@ class Trainer:
         self.ngpus_per_node = args.ngpus_per_node
         self.rank = args.rank
         self.distributed = args.distributed
-        self.device = torch.device(args.device)
+        self.device = args.device
         self.gpu = args.gpu
 
-        if args.finetune:
-            print(f'=> Finetuning {args.backbone}')
+        if self.finetune:
+            print(f'=> Finetuning {self.backbone}')
+            # absolute cheat code...
+            self._set_devices()
             if not args.test:
-                self._load_checkpoint(backbone=args.backbone)
-            self.model = Smoother(
-                in_chans=self.model.out_chans, out_chans=self.model.out_chans,
-                backbone=self.model, hiddens=args.finetune_hiddens)
+                self._load_checkpoint(backbone=self.backbone)
+            self.model = self.model.module
 
-        if self.distributed and args.device == 'cuda':
-            # For multiprocessing distributed, DistributedDataParallel constructor
-            # should always set the single device scope, otherwise,
-            # DistributedDataParallel will use all available devices.
-            if args.gpu is not None:
-                torch.cuda.set_device(args.gpu)
-                self.model.cuda(args.gpu)
-                self.model = torch.nn.parallel.DistributedDataParallel(
-                    self.model, device_ids=[args.gpu])
-                print(
-                    f'=> DistributedDataParallel initialization on GPU:{args.gpu}')
-            else:
-                self.model.cuda()
-                # DistributedDataParallel will divide and allocate batch_size to all
-                # available GPUs if device_ids are not set
-                self.model = torch.nn.parallel.DistributedDataParallel(
-                    self.model)
-                print('=> DistributedDataParallel initialization on GPU(s)')
-        elif args.gpu is not None and args.device == 'cuda':
-            torch.cuda.set_device(args.gpu)
-            self.model = self.model.cuda(args.gpu)
-            self.device = torch.device(f'cuda:{args.gpu}')
-            print('=> Standard initialization on GPU')
-        elif torch.backends.mps.is_available():
-            self.device = torch.device('mps')
-            self.model = self.model.to(self.device)
-        elif args.device == 'cuda':
-            # DataParallel will divide and allocate batch_size to all available GPUs
-            self.model = torch.nn.DataParallel(self.model).cuda()
-            print('=> DataParallel initialization on GPU(s)')
+        if self.finetune or self.complete:
+            self.model = Smoother(
+                in_chans=tshape[0], out_chans=tshape[0],
+                backbone=self.model, freezeweights=self.finetune,
+                hiddens=args.finetune_hiddens)
+
+        self._set_devices()
+        self.device = torch.device(args.device)  # redefine this
 
         # training params
         self.lr = args.lr
@@ -88,7 +67,13 @@ class Trainer:
 
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.lr)
-        self.loss_fn = nn.MSELoss()
+
+        if args.loss == 'genexp':
+            print(f'=> MSEGenexp Loss Function')
+            self.loss_fn = MSEGenexp(weight=(1.0, 5.0, 4.0))
+        else:
+            self.loss_fn = nn.MSELoss()
+
         self.loss_fn = self.loss_fn.to(self.device)
 
         # bookkeeping
@@ -103,6 +88,38 @@ class Trainer:
             f'=> Trainable Params: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}')
         print(
             f'[DEBUG] {self.device=} {next(self.model.parameters()).is_cuda=}')
+
+    def _set_devices(self):
+        if self.distributed and self.device == 'cuda':
+            # For multiprocessing distributed, DistributedDataParallel constructor
+            # should always set the single device scope, otherwise,
+            # DistributedDataParallel will use all available devices.
+            if self.gpu is not None:
+                torch.cuda.set_device(self.gpu)
+                self.model.cuda(self.gpu)
+                self.model = torch.nn.parallel.DistributedDataParallel(
+                    self.model, device_ids=[self.gpu])
+                print(
+                    f'=> DistributedDataParallel initialization on GPU:{self.gpu}')
+            else:
+                self.model.cuda()
+                # DistributedDataParallel will divide and allocate batch_size to all
+                # available GPUs if device_ids are not set
+                self.model = torch.nn.parallel.DistributedDataParallel(
+                    self.model)
+                print('=> DistributedDataParallel initialization on GPU(s)')
+        elif self.gpu is not None and self.device == 'cuda':
+            torch.cuda.set_device(self.gpu)
+            self.model = self.model.cuda(self.gpu)
+            self.device = torch.device(f'cuda:{self.gpu}')
+            print('=> Standard initialization on GPU')
+        elif torch.backends.mps.is_available():
+            self.device = torch.device('mps')
+            self.model = self.model.to(self.device)
+        elif self.device == 'cuda':
+            # DataParallel will divide and allocate batch_size to all available GPUs
+            self.model = torch.nn.DataParallel(self.model).cuda()
+            print('=> DataParallel initialization on GPU(s)')
 
     def _train_one_epoch(self, train_loader, epoch):
         batch_time = AverageMeter(Summary.NONE)
@@ -211,7 +228,7 @@ class Trainer:
         metrics = AverageMeter(Summary.AVERAGE)
 
         if save:
-            f = os.path.join(self.data_dir, 'out', self.model_name)
+            f = os.path.join(self.data_dir, 'out', f'{self.experiment}-{self.model_name}')
             os.makedirs(f, exist_ok=True)
             k = 0
 
@@ -277,7 +294,7 @@ class Trainer:
             filename = backbone
             best = True if 'best' in backbone else False
         else:
-            pre = self.experiment + (f'_finetune_' if self.finetune else '_')
+            pre = self.experiment
             if best:
                 filename = pre + self.model_name + "_model_best.pth.tar"
             else:
