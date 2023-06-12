@@ -294,7 +294,7 @@ class Trainer:
             filename = backbone
             best = True if 'best' in backbone else False
         else:
-            pre = self.experiment
+            pre = self.experiment + '_'
             if best:
                 filename = pre + self.model_name + "_model_best.pth.tar"
             else:
