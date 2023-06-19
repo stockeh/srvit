@@ -55,6 +55,8 @@ class UNet(nn.Module):
     def __init__(self, in_chans, out_chans,
                  channels=[64, 128, 256], skip=True, **kwargs):
         super().__init__()
+        if not isinstance(channels[0], int):
+            channels = [int(h) for h in channels]
         self.encoder = Encoder(in_chans, channels, skip)
         self.decoder = Decoder(channels[::-1], skip)
         self.head = nn.Conv2d(
