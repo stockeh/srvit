@@ -67,6 +67,8 @@ parser.add_argument('--unet-hiddens', nargs='+',
                     help='Convolutional filters to add to the unet '
                     'model as a list of integers, e.g. 32 64 128. '
                     'If not specified, no additional layers will be added')
+parser.add_argument('--unet-skip', action='store_true',  # default false
+                    help='use skip connections for unet')
 
 # Distributed configuration
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',

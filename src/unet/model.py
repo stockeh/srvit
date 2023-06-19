@@ -7,61 +7,64 @@ class Block(nn.Module):
     def __init__(self, in_chans, out_chans):
         super().__init__()
         self.out_chans = out_chans
-        self.conv1 = nn.Conv2d(in_chans, out_chans, 3, padding='same')
-        self.conv2 = nn.Conv2d(out_chans, out_chans, 3, padding='same')
+        self.conv = nn.Conv2d(in_chans, out_chans, 3, padding='same')
 
     def forward(self, x):
-        return F.relu(self.conv2(F.relu(self.conv1(x))))
+        return F.relu(self.conv(x))
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_chans, channels=[64, 128, 256]):
+    def __init__(self, in_chans, channels, skip):
         super().__init__()
+        self.skip = skip
         self.channels = [in_chans] + channels
-        self.enc_blocks = nn.ModuleList(
+        self.convs = nn.ModuleList(
             [Block(self.channels[i], self.channels[i+1]) for i in range(len(self.channels)-1)])
         self.pool = nn.MaxPool2d(2)
 
     def forward(self, x):
-        ftrs = []
-        for block in self.enc_blocks:
+        out = []
+        for block in self.convs:
             x = block(x)
-            ftrs.append(x)
+            if self.skip:
+                out.append(x)
             x = self.pool(x)
-        return ftrs
-
+        return x, out
 
 class Decoder(nn.Module):
-    def __init__(self, channels=[256, 128, 64]):
+    def __init__(self, channels, skip):
         super().__init__()
-        self.channels = channels
-        self.upconvs = nn.ModuleList(
-            [nn.ConvTranspose2d(channels[i], channels[i+1], 2, 2) for i in range(len(channels)-1)])
-        self.dec_blocks = nn.ModuleList(
-            [Block(channels[i], channels[i+1]) for i in range(len(channels)-1)])
+        self.skip = skip
+        self.channels = [channels[0]] + channels
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.convs = nn.ModuleList(
+            [Block(self.channels[i] * (2 if i != 0 and skip else 1), 
+            self.channels[i+1]) for i in range(len(self.channels)-1)])
 
-    def forward(self, x, encoder_features):
-        for i in range(len(self.channels)-1):
-            x = self.upconvs[i](x)
-            x = torch.cat([x, encoder_features[i]], dim=1)
-            x = self.dec_blocks[i](x)
+    def forward(self, x, o):
+        if not self.skip:
+            o = [None] * len(self.convs)
+        for block, z in zip(self.convs, o):
+            x = block(x)
+            x = self.upsample(x)
+            if self.skip:
+                x = torch.cat([x, z], dim=1)
         return x
-
 
 class UNet(nn.Module):
     def __init__(self, in_chans, out_chans,
-                 channels=[64, 128, 256], **kwargs):
+                 channels=[64, 128, 256], skip=True, **kwargs):
         super().__init__()
-        self.encoder = Encoder(in_chans, channels)
-        self.decoder = Decoder(channels[::-1])
+        self.encoder = Encoder(in_chans, channels, skip)
+        self.decoder = Decoder(channels[::-1], skip)
         self.head = nn.Conv2d(
-            channels[::-1][-1], out_chans, 1, padding='same')
+            channels[::-1][-1] * (2 if skip else 1), out_chans, 1, padding='same')
 
     def forward(self, x):
-        z = self.encoder(x)
-        out = self.decoder(z[::-1][0], z[::-1][1:])
-        out = self.head(out)
-        return out
+        x, o = self.encoder(x)
+        x = self.decoder(x, o[::-1])
+        x = self.head(x)
+        return x
 
 
 if __name__ == '__main__':
@@ -72,25 +75,22 @@ if __name__ == '__main__':
 
     print('-------- ENCODER TEST --------')
 
-    channels = [64, 128, 256]
+    channels = [32, 64, 128]
 
-    x = torch.randn(1, 3, 256, 256)
-    e = Encoder(x.shape[1], channels)
-    z = e(x)
-    for f in z:
-        print(f.shape)
+    x = torch.randn(1, 4, 256, 256)
+    e = Encoder(x.shape[1], channels, skip=True)
+    z, o = e(x)
+    print(z.shape)
 
     print('-------- DECODER TEST --------')
-    d = Decoder(channels[::-1])
-    x = torch.randn(1, channels[-1],
-                    x.shape[2] // (2**(len(channels) - 1)),
-                    x.shape[3] // (2**(len(channels) - 1)))
-    print(d(x, z[::-1][1:]).shape)
+    d = Decoder(channels[::-1], skip=True)
+    print(d(z, o[::-1]).shape)
 
     print('-------- UNET TEST --------')
-    x = torch.randn(1, 3, 256, 256)
-    u = UNet(x.shape[1], 1, channels=[64, 128, 256])
+    x = torch.randn(1, 4, 256, 256)
+    u = UNet(x.shape[1], 1, channels=[32, 32, 32], skip=False)
     y = u(x)
     print(y.shape)
     assert y.shape[2:] == x.shape[2:], 'input and output shapes must match'
     print(u)
+    print('Number of parameters: {}'.format(sum(p.numel() for p in u.parameters() if p.requires_grad)))

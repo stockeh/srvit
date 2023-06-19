@@ -23,7 +23,7 @@ class Trainer:
         elif args.model_name == 'unet':
             from unet.model import UNet
             self.model = UNet(in_chans=xshape[0], out_chans=tshape[0],
-                              channels=args.unet_hiddens)
+                              channels=args.unet_hiddens, skip=args.unet_skip)
         else:
             raise NotImplementedError
 
