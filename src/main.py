@@ -62,6 +62,12 @@ parser.add_argument('--finetune-hiddens', nargs='+',
                     'model as a list of integers, e.g. 32 64 128. '
                     'If not specified, no additional layers will be added')
 
+# UNet configuration
+parser.add_argument('--unet-hiddens', nargs='+',
+                    help='Convolutional filters to add to the unet '
+                    'model as a list of integers, e.g. 32 64 128. '
+                    'If not specified, no additional layers will be added')
+
 # Distributed configuration
 parser.add_argument('-j', '--workers', default=8, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')

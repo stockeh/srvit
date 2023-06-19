@@ -6,8 +6,6 @@ import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
 
-from vit.model import ViT
-from smoother.model import Smoother
 from common import MSEGenexp
 from utils import AverageMeter, Summary
 
@@ -17,10 +15,15 @@ class Trainer:
     def __init__(self, args, xshape, tshape):
 
         if args.model_name == 'vit':
+            from vit.model import ViT
             self.model = ViT(image_size=xshape[1:], patch_size=args.h_patch,
                              in_chans=xshape[0], out_chans=tshape[0],
                              dim=args.h_dim, depth=args.h_depth, heads=args.h_heads,
                              mlp_dim=args.h_mlp_dim, dim_head=args.h_dim_head)
+        elif args.model_name == 'unet':
+            from unet.model import UNet
+            self.model = UNet(in_chans=xshape[0], out_chans=tshape[0],
+                              channels=args.unet_hiddens)
         else:
             raise NotImplementedError
 
@@ -50,6 +53,7 @@ class Trainer:
             self.model = self.model.module
 
         if self.finetune or self.complete:
+            from smoother.model import Smoother
             self.model = Smoother(
                 in_chans=tshape[0], out_chans=tshape[0],
                 backbone=self.model, freezeweights=self.finetune,
@@ -228,7 +232,8 @@ class Trainer:
         metrics = AverageMeter(Summary.AVERAGE)
 
         if save:
-            f = os.path.join(self.data_dir, 'out', f'{self.experiment}-{self.model_name}')
+            f = os.path.join(self.data_dir, 'out',
+                             f'{self.experiment}-{self.model_name}')
             os.makedirs(f, exist_ok=True)
             k = 0
 

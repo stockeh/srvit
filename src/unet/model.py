@@ -4,20 +4,20 @@ import torch.nn.functional as F
 
 
 class Block(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_chans, out_chans):
         super().__init__()
-        self.out_channels = out_channels
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding='same')
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding='same')
+        self.out_chans = out_chans
+        self.conv1 = nn.Conv2d(in_chans, out_chans, 3, padding='same')
+        self.conv2 = nn.Conv2d(out_chans, out_chans, 3, padding='same')
 
     def forward(self, x):
         return F.relu(self.conv2(F.relu(self.conv1(x))))
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channels, channels=[64, 128, 256]):
+    def __init__(self, in_chans, channels=[64, 128, 256]):
         super().__init__()
-        self.channels = [in_channels] + channels
+        self.channels = [in_chans] + channels
         self.enc_blocks = nn.ModuleList(
             [Block(self.channels[i], self.channels[i+1]) for i in range(len(self.channels)-1)])
         self.pool = nn.MaxPool2d(2)
@@ -49,13 +49,13 @@ class Decoder(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, out_channels,
+    def __init__(self, in_chans, out_chans,
                  channels=[64, 128, 256], **kwargs):
         super().__init__()
-        self.encoder = Encoder(in_channels, channels)
+        self.encoder = Encoder(in_chans, channels)
         self.decoder = Decoder(channels[::-1])
         self.head = nn.Conv2d(
-            channels[::-1][-1], out_channels, 1, padding='same')
+            channels[::-1][-1], out_chans, 1, padding='same')
 
     def forward(self, x):
         z = self.encoder(x)
