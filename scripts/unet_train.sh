@@ -4,7 +4,7 @@
 #SBATCH -p a100
 #SBATCH --account=ai2es_premium
 #SBATCH -t 14-00:00                  # time limit: (D-HH:MM) 
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:6
 #SBATCH --cpus-per-gpu=16            # --cpus-per-task=8
 #SBATCH --mem=128gb                  # --mem-per-cpu=1gb
 #SBATCH --nodes=1                    # Run all processes on a single node
