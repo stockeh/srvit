@@ -1,9 +1,18 @@
 import os
+import json
+import argparse
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 
+from tqdm import tqdm
 from scipy.stats import pearsonr
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--data-dir', type=str,
+                    default='/home/jstock/data/conus3/A/',
+                    help='data directory')
+parser.add_argument('--name', type=str, default='unet01-unet',
+                    help='experiment-model name')
 
 ################################################################
 
@@ -44,7 +53,7 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
     stats['rmsd'] = np.sqrt(np.mean((goes[good]-mrms[good])**2))
     stats['rsq'] = pearsonr(goes[good], mrms[good])[0]**2
 
-    for rthr in refthrs:
+    for rthr in tqdm(refthrs):
 
         hasrad = mrms > rthr
         nrad = np.sum(hasrad)
@@ -64,7 +73,7 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
         nhit = np.sum(hasrad & hassat & good)
         nmis = np.sum(hasrad & ~hassat & good)
         nfal = np.sum(~hasrad & hassat & good)
-        #nrej = np.sum( ~hasrad & ~hassat & good )
+        # nrej = np.sum( ~hasrad & ~hassat & good )
 
         try:
             csi = float(nhit) / float(nhit + nmis + nfal)
@@ -93,50 +102,50 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
     return stats
 
 
-if __name__ == '__main__':
-    # original stats from Hilburn et al. (2020) Table 3
-    og_stats = dict()
-    og_stats['ref'] = refthrs_default
-    og_stats['pod'] = [0.92, 0.85, 0.80, 0.71,
-                       0.63, 0.55, 0.51, 0.52, 0.43, 0.37]
-    og_stats['far'] = [0.23, 0.18, 0.22, 0.31,
-                       0.40, 0.46, 0.57, 0.57, 0.65, 0.77]
-    og_stats['csi'] = [0.72, 0.72, 0.65, 0.54,
-                       0.45, 0.38, 0.33, 0.31, 0.24, 0.14]
-    og_stats['bias'] = [1.19, 1.04, 1.03, 1.03,
-                        1.05, 1.01, 1.06, 1.23, 1.24, 1.17]
+def load_ty(xtf, yf, idx):
+    with np.load(xtf[idx]) as data:  # C x H x W
+        # x = np.flip(np.moveaxis(data['xdata'], -1, 0), axis=1)
+        t = np.flip(data['ydata'][np.newaxis, ...], axis=1) * ymax
+    with np.load(yf[idx]) as data:
+        y = np.flip(data, axis=1) * ymax
+    return t, y
 
-    # TODO: load target and prediction data
-    Ytest *= ymax
-    Ttest *= ymax
+
+def main(args):
+    # 1) get target and predicted data files
+    xt_samples = []
+    v = os.path.join(args.data_dir, 'test')
+    for f in os.listdir(v):
+        if f.endswith('.npz'):
+            xt_samples.append(os.path.join(v, f))
+    xt_samples.sort()
+
+    y_samples = []
+    v = os.path.join(args.data_dir, 'out', args.model_name)
+    for f in os.listdir(v):
+        if f.endswith('.npy'):
+            y_samples.append(os.path.join(v, f))
+    y_samples.sort()
+
+    # 2) load data from disk
+    Ttest, Ytest = [], []
+    for i in tqdm(range(len(xt_samples))):
+        t, y = load_ty(xt_samples, y_samples, i)
+        Ttest.append(t)
+        Ytest.append(y)
+        if i == 10:
+            break
+    Ttest = np.concatenate(Ttest, axis=0)
+    Ytest = np.concatenate(Ytest, axis=0)
+
+    # 3) compute statistics
     stats = get_refc_stats(Ytest, Ttest)
 
-    # rest is for plotting
-    media_path = '../media'
+    with open(os.path.join(args.data_dir, 'out',
+                           args.model_name, 'stats.json'), 'w') as f:
+        json.dump(stats, f)
 
-    cmap = cm.get_cmap('Spectral', 4)
 
-    fontsize = 11
-    lw = 2.5
-    metrics = ['pod', 'far', 'csi', 'bias']
-
-    # differences == True  : plot difference from original stats
-    #                False : plot statistics as they are
-    for difference in [False, True]:
-        fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-
-        for i, m in enumerate(metrics):
-            ax.plot(stats['ref'], np.array(stats[m])-(og_stats[m] if difference else 0),
-                    label=m.upper(), ls='-', lw=lw, color=cmap(i))
-        ax.set_xticks(stats['ref'])
-
-        ax.set_xlabel('REFC Threshold (dBZ)', fontsize=fontsize)
-        ax.set_ylabel('Score', fontsize=fontsize)
-        ax.tick_params(axis='both', labelsize=fontsize)
-        ax.legend(fontsize=fontsize-1)
-        ax.grid(alpha=0.5)
-        ax.set_title(f'diff: {str(difference).lower()}',
-                     loc='left', style='italic')
-
-        # fig.savefig(os.path.join(media_path, f'metrics_diff_{str(difference).lower()}.png'),
-        #             dpi=300, bbox_inches='tight')
+if __name__ == '__main__':
+    args = parser.parse_args()
+    main(args)
