@@ -4,6 +4,8 @@ import argparse
 import numpy as np
 
 from tqdm import tqdm
+from tqdm.contrib.concurrent import thread_map  # or process_map
+
 from scipy.stats import pearsonr
 
 
@@ -33,7 +35,8 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
 
     # outputs:
     #   stats = dictionary of stats
-
+    
+    print('=> starting...')
     good = (goes > -999) & (mrms > -999)
 
     # note: remove sub-zero variability
@@ -48,10 +51,17 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
     stats['bias'] = []
     stats['nrad'] = []
     stats['nsat'] = []
-    stats['mean(goes-mrms)'] = np.mean(goes[good]-mrms[good])
-    stats['std(goes-mrms)'] = np.std(goes[good]-mrms[good])
-    stats['rmsd'] = np.sqrt(np.mean((goes[good]-mrms[good])**2))
+    diff = goes[good] - mrms[good]
+    print('=> diff (goes-mrms)')
+    stats['mean(goes-mrms)'] = np.mean(diff)
+    print('=> mean(goes-mrms)')
+    stats['std(goes-mrms)'] = np.std(diff)
+    print('=> std(goes-mrms)')
+    stats['rmsd'] = np.sqrt(np.mean(diff**2))
+    print('=> rmsd')
+    del diff
     stats['rsq'] = pearsonr(goes[good], mrms[good])[0]**2
+    print('=> rsq')
 
     for rthr in tqdm(refthrs):
 
@@ -102,14 +112,25 @@ def get_refc_stats(goes, mrms, refthrs=refthrs_default):
     return stats
 
 
-def load_ty(xtf, yf, idx):
-    with np.load(xtf[idx]) as data:  # C x H x W
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
+def load_ty(args):
+    xtf, yf = args
+    with np.load(xtf) as data:  # C x H x W
         # x = np.flip(np.moveaxis(data['xdata'], -1, 0), axis=1)
         t = np.flip(data['ydata'][np.newaxis, ...], axis=1) * ymax
-    with np.load(yf[idx]) as data:
-        y = np.flip(data, axis=1) * ymax
+    y = np.flip(np.load(yf), axis=1) * ymax
     return t, y
-
 
 def main(args):
     # 1) get target and predicted data files
@@ -121,30 +142,35 @@ def main(args):
     xt_samples.sort()
 
     y_samples = []
-    v = os.path.join(args.data_dir, 'out', args.model_name)
+    v = os.path.join(args.data_dir, 'out', args.name)
     for f in os.listdir(v):
         if f.endswith('.npy'):
             y_samples.append(os.path.join(v, f))
     y_samples.sort()
 
     # 2) load data from disk
-    Ttest, Ytest = [], []
-    for i in tqdm(range(len(xt_samples))):
-        t, y = load_ty(xt_samples, y_samples, i)
-        Ttest.append(t)
-        Ytest.append(y)
-        if i == 10:
-            break
-    Ttest = np.concatenate(Ttest, axis=0)
-    Ytest = np.concatenate(Ytest, axis=0)
+    # 17344
+    # Ttest = np.zeros((1734,1,768,1536))
+    # Ytest = np.zeros((1734,1,768,1536))
+    # print('=> storage arrays created')
+    # for i in tqdm(range(Ttest.shape[0])):
+    #     t, y = load_ty(xt_samples, y_samples, i)
+    #     Ttest[i] = t
+    #     Ytest[i] = y
+
+    iterable = [(xt_samples[i], y_samples[i]) for i in range(1734)]
+    Ttest, Ytest = zip(*thread_map(load_ty, iterable, max_workers=32))
+    Ttest, Ytest = np.array(Ttest), np.array(Ytest)
+    print('=> finished loading...')
 
     # 3) compute statistics
     stats = get_refc_stats(Ytest, Ttest)
 
-    with open(os.path.join(args.data_dir, 'out',
-                           args.model_name, 'stats.json'), 'w') as f:
-        json.dump(stats, f)
-
+    dumped = json.dumps(stats, cls=NumpyEncoder)
+    output_file = os.path.join(args.data_dir, 'out', args.name, 'stats.json') 
+    with open(output_file, 'w') as f:
+        json.dump(dumped, f)
+    print(f'=> results saved to {output_file}')
 
 if __name__ == '__main__':
     args = parser.parse_args()
