@@ -4,17 +4,18 @@ import argparse
 import numpy as np
 
 from tqdm import tqdm
-from tqdm.contrib.concurrent import thread_map  # or process_map
-
-from scipy.stats import pearsonr
-
+from multiprocessing.pool import ThreadPool
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data-dir', type=str,
-                    default='/home/jstock/data/conus3/A/',
+parser.add_argument('--input', type=str,
+                    default='/mnt/conus3/jason_conus3/test',
                     help='data directory')
-parser.add_argument('--name', type=str, default='unet01-unet',
-                    help='experiment-model name')
+parser.add_argument('--results', type=str,
+                    default='/mnt/mlnas01/stock/',
+                    help='results directory')
+parser.add_argument('--model', type=str,
+                    default='complete01-vit',
+                    help='model directory')
 
 ################################################################
 
@@ -23,93 +24,100 @@ ymax = 60.0  # value from Hilburn et al. (2020)
 
 ################################################################
 
+def load_ty(args):
+    xtf, yf = args
+    with np.load(xtf) as data:  # C x H x W
+        # x = np.flip(np.moveaxis(data['xdata'], -1, 0), axis=1)
+        t = np.flip(data['ydata'][np.newaxis, ...], axis=1) * ymax
+    y = np.flip(np.load(yf), axis=1) * ymax
+    return t, y
 
-def get_refc_stats(goes, mrms, refthrs=refthrs_default):
+def get_refc_stats(goes_filenames, mrms_filenames, batch_size=100, refthrs=refthrs_default):
+    '''
+    inputs:
+        goes_filenames: list of str, filenames of GOES data (npy files)
+        mrms_filenames: list of str, filenames of MRMS data (npy files)
+        batch_size: int, batch size for processing
+        refthrs: np array, thresholds for statistics computation
+    outputs:
+        stats: dictionary of stats
+    '''
 
-    # inputs, required:
-    #   goes = goes refc
-    #   mrms = mrms refc
+    goes_sample = np.load(goes_filenames[0])
+    goes_shape = goes_sample.shape
+    num_samples = len(goes_filenames)
+    n_batches = int(np.ceil(num_samples / batch_size))
 
-    # inputs, optional:
-    #   refthrs = refc thresholds to evaluate statistics
-
-    # outputs:
-    #   stats = dictionary of stats
-    
     print('=> starting...')
-    good = (goes > -999) & (mrms > -999)
-
-    # note: remove sub-zero variability
-    goes[goes < 0] = 0.
-    mrms[mrms < 0] = 0.
-
     stats = {}
     stats['ref'] = refthrs
     stats['pod'] = []
     stats['far'] = []
     stats['csi'] = []
     stats['bias'] = []
-    stats['nrad'] = []
-    stats['nsat'] = []
-    diff = goes[good] - mrms[good]
-    print('=> diff (goes-mrms)')
-    stats['mean(goes-mrms)'] = np.mean(diff)
-    print('=> mean(goes-mrms)')
-    stats['std(goes-mrms)'] = np.std(diff)
-    print('=> std(goes-mrms)')
-    stats['rmsd'] = np.sqrt(np.mean(diff**2))
-    print('=> rmsd')
-    del diff
-    stats['rsq'] = pearsonr(goes[good], mrms[good])[0]**2
-    print('=> rsq')
 
-    for rthr in tqdm(refthrs):
+    for i, rthr in tqdm(enumerate(refthrs), total=len(refthrs)):
 
-        hasrad = mrms > rthr
-        nrad = np.sum(hasrad)
+        nhit_total = 0
+        nmis_total = 0
+        nfal_total = 0
+        if i == 0:
+            diff_mean_total = 0
+            diff_sumsq_total = 0
 
-        hassat = goes > rthr
-        nsat = np.sum(hassat)
+        with ThreadPool(32) as pool:
+            for batch_start in tqdm(range(0, num_samples, batch_size), total=n_batches, leave=False):
+                batch_end = min(batch_start + batch_size, num_samples)
 
-        if nrad == 0:
+                goes_batch, mrms_batch = zip(*pool.map(load_ty, [(mrms_filenames[j], goes_filenames[j])
+                                                                for j in range(batch_start, batch_end)]))
+
+                goes_batch = np.array(goes_batch)
+                mrms_batch = np.array(mrms_batch)
+
+                goes_batch[goes_batch < 0] = 0.
+                mrms_batch[mrms_batch < 0] = 0.
+
+                hasrad = mrms_batch > rthr
+                hassat = goes_batch > rthr
+
+                nhit = np.sum(hasrad & hassat)
+                nmis = np.sum(hasrad & ~hassat)
+                nfal = np.sum(~hasrad & hassat)
+
+                nhit_total += nhit
+                nmis_total += nmis
+                nfal_total += nfal
+
+                if i == 0:
+                    diff = goes_batch - mrms_batch
+                    diff_mean = np.mean(diff)
+                    diff_mean_total += diff_mean * diff.size
+                    diff_sumsq_total += np.sum(np.square(diff))
+
+        if nhit_total == 0:
             stats['pod'].append(np.nan)
             stats['far'].append(np.nan)
             stats['csi'].append(np.nan)
             stats['bias'].append(np.nan)
-            stats['nrad'].append(nrad)
-            stats['nsat'].append(nsat)
-            continue
+        else:
+            csi = float(nhit_total) / float(nhit_total + nmis_total + nfal_total)
+            pod = float(nhit_total) / float(nhit_total + nmis_total)
+            far = float(nfal_total) / float(nhit_total + nfal_total)
+            bias = float(nhit_total + nfal_total) / float(nhit_total + nmis_total)
+            stats['pod'].append(pod)
+            stats['far'].append(far)
+            stats['csi'].append(csi)
+            stats['bias'].append(bias)
 
-        nhit = np.sum(hasrad & hassat & good)
-        nmis = np.sum(hasrad & ~hassat & good)
-        nfal = np.sum(~hasrad & hassat & good)
-        # nrej = np.sum( ~hasrad & ~hassat & good )
+    diff_mean = diff_mean_total / (num_samples * goes_shape[1] * goes_shape[2])
+    rmse = np.sqrt(diff_sumsq_total / (num_samples * goes_shape[1] * goes_shape[2]))
 
-        try:
-            csi = float(nhit) / float(nhit + nmis + nfal)
-        except ZeroDivisionError:
-            csi = np.nan
-        try:
-            pod = float(nhit) / float(nhit + nmis)
-        except ZeroDivisionError:
-            pod = np.nan
-        try:
-            far = float(nfal) / float(nhit + nfal)  # FA ratio
-        except ZeroDivisionError:
-            far = np.nan
-        try:
-            bias = float(nhit + nfal) / float(nhit + nmis)
-        except ZeroDivisionError:
-            bias = np.nan
-
-        stats['pod'].append(pod)
-        stats['far'].append(far)
-        stats['csi'].append(csi)
-        stats['bias'].append(bias)
-        stats['nrad'].append(nrad)
-        stats['nsat'].append(nsat)
+    stats['diff_mean'] = diff_mean
+    stats['rmse'] = rmse
 
     return stats
+
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -124,50 +132,30 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def load_ty(args):
-    xtf, yf = args
-    with np.load(xtf) as data:  # C x H x W
-        # x = np.flip(np.moveaxis(data['xdata'], -1, 0), axis=1)
-        t = np.flip(data['ydata'][np.newaxis, ...], axis=1) * ymax
-    y = np.flip(np.load(yf), axis=1) * ymax
-    return t, y
-
 def main(args):
     # 1) get target and predicted data files
     xt_samples = []
-    v = os.path.join(args.data_dir, 'test')
+    v = args.input
     for f in os.listdir(v):
-        if f.endswith('.npz'):
+        if 'regA' in f and f.endswith('.npz'):
             xt_samples.append(os.path.join(v, f))
     xt_samples.sort()
 
     y_samples = []
-    v = os.path.join(args.data_dir, 'out', args.name)
+    v = os.path.join(args.results, args.model)
     for f in os.listdir(v):
         if f.endswith('.npy'):
             y_samples.append(os.path.join(v, f))
     y_samples.sort()
 
-    # 2) load data from disk
-    # 17344
-    # Ttest = np.zeros((1734,1,768,1536))
-    # Ytest = np.zeros((1734,1,768,1536))
-    # print('=> storage arrays created')
-    # for i in tqdm(range(Ttest.shape[0])):
-    #     t, y = load_ty(xt_samples, y_samples, i)
-    #     Ttest[i] = t
-    #     Ytest[i] = y
+    # xt_samples = xt_samples[:2000]
+    # y_samples = y_samples[:2000]
 
-    iterable = [(xt_samples[i], y_samples[i]) for i in range(1734)]
-    Ttest, Ytest = zip(*thread_map(load_ty, iterable, max_workers=32))
-    Ttest, Ytest = np.array(Ttest), np.array(Ytest)
-    print('=> finished loading...')
-
-    # 3) compute statistics
-    stats = get_refc_stats(Ytest, Ttest)
+    # 2) compute statistics
+    stats = get_refc_stats(y_samples, xt_samples)
 
     dumped = json.dumps(stats, cls=NumpyEncoder)
-    output_file = os.path.join(args.data_dir, 'out', args.name, 'stats.json') 
+    output_file = os.path.join(args.results, args.model, 'stats.json') 
     with open(output_file, 'w') as f:
         json.dump(dumped, f)
     print(f'=> results saved to {output_file}')

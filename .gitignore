@@ -1,6 +1,8 @@
 # Custom
 ckpt/*.tar
 logs/log*
+media/
+*.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
