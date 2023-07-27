@@ -27,6 +27,9 @@ parser.add_argument('-m', '--models', nargs='+', default=['mrms', 'complete01-vi
 parser.add_argument('--horizontal', action='store_true',  # default false
                     help='make plots horizontal instead of vertical')
 
+parser.add_argument('--stats', action='store_true',  # default false
+                    help='include stats in the output')
+
 parser.add_argument('--mode', default='panel', const='panel', type=str, nargs='?',
                     choices=['panel', 'composite'],
                     help='plot mode (default: %(default)s)')
@@ -54,7 +57,7 @@ def load_y(y_dir, idx):
     Assumes data formated as: `test_predictions_000001.npy`
     """
     global ymax
-    return np.clip(np.flip(np.load(os.path.join(y_dir, f'test_predictions_{idx:06d}.npy')), axis=0), 0, 1) * ymax
+    return np.clip(np.load(os.path.join(y_dir, f'test_predictions_{idx:06d}.npy')), 0, 1) * ymax
 
 def load_xt(xt_dir, idx):
     """
@@ -62,8 +65,8 @@ def load_xt(xt_dir, idx):
     """
     global ymax
     with np.load(os.path.join(xt_dir, f'conus3_regA_sclA_{idx:06d}.npz')) as data:  # C x H x W
-        x = np.flip(np.moveaxis(data['xdata'], -1, 0), axis=0)
-        t = np.flip(data['ydata'][np.newaxis, ...], axis=0) * ymax
+        x = np.moveaxis(data['xdata'], -1, 0)
+        t = data['ydata'][np.newaxis, ...] * ymax
     return x, t
 
 def load_xty(xt_dir, y_dir, idx):
@@ -195,7 +198,7 @@ def plot_pannel(config, args):
                     label = label.split('-')[1]
                 plt.ylabel(label, loc='top', fontsize=fontsize, fontweight='bold')
 
-            if model.lower() != 'mrms':
+            if model.lower() != 'mrms' and args.stats:
                 ti, yi = load_xty(xt_dir, y_dir, ide)[1:]
                 rmse = np.sqrt(np.mean((yi-ti)**2))
                 r2 = r2_score(yi.flatten(), ti.flatten())
@@ -223,7 +226,7 @@ def plot_composite(config, args):
     """
     models = args.models
     xt_dir, results_dir = args.xt_dir, args.results_dir
-    
+
     basemap, x, y, ids = init_params(config, args)
 
     output_dir = os.path.join(args.media_dir, f'{config["name"]}')
@@ -231,25 +234,29 @@ def plot_composite(config, args):
 
     print(f'=> plotting {len(ids)} images')
 
+    fontsize = 12
     if args.horizontal:
         fig = plt.figure(figsize=(6 * len(models),5), constrained_layout=True)
     else:
-        fig = plt.figure(figsize=(6,len(models)*5), constrained_layout=True)
+        fig = plt.figure(figsize=(5,len(models)*3.5), constrained_layout=True)
     fig.subplots_adjust(left=0.05,right=0.95,bottom=0.05,top=0.95)
     cmap, norm, bounds, ticklabels = get_colors()
 
     for i, ide in enumerate(tqdm(ids)):
         for j, model in enumerate(tqdm(models, leave=False, total=len(models))):
-            title = model.upper()
-            if '-' in title:
-                title = 'GOES-16 ' + title.split('-')[1]
             time = config['dates'][i]
-            title = f"{title} {time.replace('_', ' ')}"
+            if args.horizontal or len(models) == 1:
+                s = model.upper()
+                if '-' in title:
+                    s = 'GOES-16 ' + title.split('-')[1] + ' '
+            else:
+                s = ''
+            title = f"{s}{time.replace('_', ' ')}"
 
             if args.horizontal:
-                plt.subplot(1, len(models), 1+j)
+                ax = plt.subplot(1, len(models), 1+j)
             else:
-                plt.subplot(len(models), 1, 1+j)
+                ax = plt.subplot(len(models), 1, 1+j)
             
             if model.lower() == 'mrms':
                 data = load_xt(xt_dir, ide)[1][0]
@@ -271,11 +278,37 @@ def plot_composite(config, args):
             basemap.drawstates()
             basemap.drawcounties()
 
-            plt.title(title)
+            if not args.horizontal and j == 0:
+                plt.title(title, fontsize=fontsize)
+            if len(models) > 1 and not args.horizontal and i == 0:
+                label = model.upper()
+                if '-' in label:
+                    label = label.split('-')[1]
+                plt.ylabel(label, loc='top', fontsize=fontsize, fontweight='bold')
 
-            cb = plt.colorbar(pcm,ticks=bounds,orientation='horizontal',fraction=0.1,pad=0.05)
-            cb.ax.set_xticklabels(ticklabels)
-            cb.set_label('Composite Reflectivity (dBZ)')
+
+            colorbar = False
+            if not args.horizontal and j == len(models)-1:
+                colorbar = True
+            elif args.horizontal:
+                colorbar = True
+            if colorbar:
+                cb = plt.colorbar(pcm,ticks=bounds,orientation='horizontal',fraction=0.1,pad=0.02)
+                cb.ax.set_xticklabels(ticklabels)
+                cb.set_label('Composite Reflectivity (dBZ)', fontsize=fontsize)
+
+            if model.lower() != 'mrms' and args.stats:
+                ti, yi = load_xty(xt_dir, y_dir, ide)[1:]
+                rmse = np.sqrt(np.mean((yi-ti)**2))
+                r2 = r2_score(yi.flatten(), ti.flatten())
+                # plt.xlabel(f'RMSE: {rmse:.2f}, R2: {r2:.2f}', fontsize=fontsize, color='gray')
+                t = plt.text(0.98, 0.85, f'RMSE: {rmse:.2f}\nR2: {r2:.2f}', transform=ax.transAxes,
+                             fontsize=fontsize, va='bottom', ha='right', color='black')
+                t.set_bbox(dict(facecolor='lightgray', alpha=0.3, edgecolor='gray'))
+            
+            # pannel text labels in bottom left corner
+            plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1, 
+                     fontweight='bold', va='bottom', ha='left', color='black')
 
         filename = os.path.join(output_dir, f'{time}.png')
         fig.savefig(filename, dpi=300)

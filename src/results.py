@@ -24,6 +24,7 @@ ymax = 60.0  # value from Hilburn et al. (2020)
 
 ################################################################
 
+
 def load_ty(args):
     xtf, yf = args
     with np.load(xtf) as data:  # C x H x W
@@ -31,6 +32,7 @@ def load_ty(args):
         t = np.flip(data['ydata'][np.newaxis, ...], axis=1) * ymax
     y = np.flip(np.load(yf), axis=1) * ymax
     return t, y
+
 
 def get_refc_stats(goes_filenames, mrms_filenames, batch_size=100, refthrs=refthrs_default):
     '''
@@ -55,22 +57,28 @@ def get_refc_stats(goes_filenames, mrms_filenames, batch_size=100, refthrs=refth
     stats['far'] = []
     stats['csi'] = []
     stats['bias'] = []
+    stats['rmses'] = []
+
+    # diff_mean_total = 0
+    diff_sumsq_total = 0
+    # r2 vars
+    tsum = 0
+    tsumsqrd = 0
 
     for i, rthr in tqdm(enumerate(refthrs), total=len(refthrs)):
-
+        nhasrads_total = 0
         nhit_total = 0
         nmis_total = 0
         nfal_total = 0
-        if i == 0:
-            diff_mean_total = 0
-            diff_sumsq_total = 0
+
+        rthr_diff_sumsq_total = 0
 
         with ThreadPool(32) as pool:
             for batch_start in tqdm(range(0, num_samples, batch_size), total=n_batches, leave=False):
                 batch_end = min(batch_start + batch_size, num_samples)
 
                 goes_batch, mrms_batch = zip(*pool.map(load_ty, [(mrms_filenames[j], goes_filenames[j])
-                                                                for j in range(batch_start, batch_end)]))
+                                                                 for j in range(batch_start, batch_end)]))
 
                 goes_batch = np.array(goes_batch)
                 mrms_batch = np.array(mrms_batch)
@@ -85,43 +93,55 @@ def get_refc_stats(goes_filenames, mrms_filenames, batch_size=100, refthrs=refth
                 nmis = np.sum(hasrad & ~hassat)
                 nfal = np.sum(~hasrad & hassat)
 
+                nhasrads_total += np.sum(hasrad)
                 nhit_total += nhit
                 nmis_total += nmis
                 nfal_total += nfal
 
+                diff = goes_batch - mrms_batch
+                rthr_diff_sumsq_total += np.sum(np.square(diff[hasrad]))
                 if i == 0:
-                    diff = goes_batch - mrms_batch
-                    diff_mean = np.mean(diff)
-                    diff_mean_total += diff_mean * diff.size
+                    # diff_mean_total += np.mean(diff) * diff.size
                     diff_sumsq_total += np.sum(np.square(diff))
+                    tsum += np.sum(mrms_batch)
+                    tsumsqrd += np.sum(np.square(mrms_batch))
 
         if nhit_total == 0:
             stats['pod'].append(np.nan)
             stats['far'].append(np.nan)
             stats['csi'].append(np.nan)
             stats['bias'].append(np.nan)
+            stats['rmses'].append(np.nan)
         else:
-            csi = float(nhit_total) / float(nhit_total + nmis_total + nfal_total)
+            csi = float(nhit_total) / \
+                float(nhit_total + nmis_total + nfal_total)
             pod = float(nhit_total) / float(nhit_total + nmis_total)
             far = float(nfal_total) / float(nhit_total + nfal_total)
-            bias = float(nhit_total + nfal_total) / float(nhit_total + nmis_total)
+            bias = float(nhit_total + nfal_total) / \
+                float(nhit_total + nmis_total)
+            rmse = np.sqrt(rthr_diff_sumsq_total / nhasrads_total)
             stats['pod'].append(pod)
             stats['far'].append(far)
             stats['csi'].append(csi)
             stats['bias'].append(bias)
+            stats['rmses'].append(rmse)
 
-    diff_mean = diff_mean_total / (num_samples * goes_shape[1] * goes_shape[2])
-    rmse = np.sqrt(diff_sumsq_total / (num_samples * goes_shape[1] * goes_shape[2]))
+    n_samples_pixels = num_samples * goes_shape[1] * goes_shape[2]
+    # diff_mean = diff_mean_total / n_samples_pixels
+    rmse = np.sqrt(diff_sumsq_total / n_samples_pixels)
+    ss_tot = tsumsqrd - (tsum**2 / n_samples_pixels)
+    rsqrd = 1 - (diff_sumsq_total / ss_tot)
 
-    stats['diff_mean'] = diff_mean
+    # stats['diff_mean'] = diff_mean
     stats['rmse'] = rmse
+    stats['rsqrd'] = rsqrd
 
     return stats
 
 
-
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
+
     def default(self, obj):
         if isinstance(obj, np.integer):
             return int(obj)
@@ -155,10 +175,11 @@ def main(args):
     stats = get_refc_stats(y_samples, xt_samples)
 
     dumped = json.dumps(stats, cls=NumpyEncoder)
-    output_file = os.path.join(args.results, args.model, 'stats.json') 
+    output_file = os.path.join(args.results, args.model, 'stats.json')
     with open(output_file, 'w') as f:
         json.dump(dumped, f)
     print(f'=> results saved to {output_file}')
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
