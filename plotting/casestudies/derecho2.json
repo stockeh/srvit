@@ -1,0 +1,10 @@
+{
+    "name": "derecho2",
+    "dates": [
+        "2022-05-12_21:00Z"
+    ],
+    "minlat": 39,
+    "maxlat": 45,
+    "minlon": -105,
+    "maxlon": -94
+}

@@ -1,0 +1,22 @@
+{
+    "name": "cases",
+    "multi":
+    [{
+        "dates": [
+            "2022-05-12_21:00Z"
+        ],
+        "minlat": 39,
+        "maxlat": 45,
+        "minlon": -106,
+        "maxlon": -94
+    },
+    {
+        "dates": [
+            "2022-06-14_01:15Z"
+        ],
+        "minlat": 37.5,
+        "maxlat": 46,
+        "minlon": -92,
+        "maxlon": -77
+    }]
+}

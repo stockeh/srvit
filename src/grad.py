@@ -15,7 +15,8 @@ parser.add_argument('--results', type=str,
                     default='/mnt/mlnas01/stock/',
                     help='results directory')
 parser.add_argument('--model', type=str,
-                    choices=['mrms', 'complete01-vit', 'unet01-unet'],
+                    choices=['mrms', 'complete01-vit',
+                             'unet01-unet', 'base01-vit'],
                     help='model name')
 parser.add_argument('--kind', type=str, default='test',
                     choices=['train', 'val', 'test'],
@@ -29,6 +30,7 @@ ymax = 60.0  # value from Hilburn et al. (2020)
 
 ################################################################
 
+
 def load_t(filename):
     global ymax
     with np.load(filename) as data:  # C x H x W
@@ -36,10 +38,11 @@ def load_t(filename):
         t = data['ydata'][np.newaxis, ...] * ymax
     return t
 
+
 def load_y(filename):
     global ymax
     return np.load(filename) * ymax
-    
+
 
 def grad(args):
     filename, mrms = args
@@ -72,15 +75,16 @@ def main(args):
     n_batches = int(np.ceil(len(samples) / batch_size))
     for i in tqdm(range(n_batches)):
         batch = samples[i*batch_size:(i+1)*batch_size]
-        grads[i*batch_size:(i+1)*batch_size] = thread_map(grad, zip(batch, [mrms]*len(batch)), 
-                                                          max_workers=args.num_workers, 
+        grads[i*batch_size:(i+1)*batch_size] = thread_map(grad, zip(batch, [mrms]*len(batch)),
+                                                          max_workers=args.num_workers,
                                                           leave=False, total=len(batch))
 
     output_file = os.path.join(args.results,
-                         f'gradient_magnitude_{args.model}_{args.kind}.npy')
+                               f'gradient_magnitude_{args.model}_{args.kind}.npy')
     np.save(output_file, grads)
 
     print(f'=> results saved to {output_file}')
+
 
 if __name__ == '__main__':
     """
