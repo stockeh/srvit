@@ -112,7 +112,7 @@ def get_colors():
     return cmap, norm, bounds, ticklabels
 
 
-def init_params(config, args, full_domain=False):
+def init_params(config, args):
     nlon = 1799
     nlat = 1059
     count = nlat*nlon
@@ -125,7 +125,7 @@ def init_params(config, args, full_domain=False):
     lon = lon[147:nlat-144, 153:nlon-110]
     lat = lat[147:nlat-144, 153:nlon-110]
 
-    if full_domain:
+    if 'minlon' not in config:
         config['minlon'] = lon.min()
         config['maxlon'] = lon.max()
         config['minlat'] = lat.min()
@@ -156,13 +156,12 @@ def plot_pannel(config, args):
     models = args.models
     xt_dir, results_dir = args.xt_dir, args.results_dir
 
-    basemap, x, y, ids = init_params(config, args, full_domain=True)
+    basemap, x, y, ids = init_params(config, args)
 
     output_dir = os.path.join(args.media_dir, f'{config["name"]}')
     os.makedirs(output_dir, exist_ok=True)
 
     print(f'=> plotting {len(ids)} images')
-
     fig = plt.figure(figsize=(5 * len(ids), 2.7 * len(models)),
                      constrained_layout=True)
 
@@ -217,10 +216,10 @@ def plot_pannel(config, args):
                              fontsize=fontsize, va='bottom', ha='right', color='black')
                 t.set_bbox(dict(facecolor='lightgray',
                            alpha=0.3, edgecolor='gray'))
-
-            # pannel text labels in bottom left corner
-            plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
-                     fontweight='bold', va='bottom', ha='left', color='black')
+            if len(ids) > 1 and len(models) > 1:
+                # pannel text labels in bottom left corner
+                plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
+                        fontweight='bold', va='bottom', ha='left', color='black')
 
     cb = plt.colorbar(pcm, ticks=bounds, orientation='vertical',
                       ax=axes, fraction=0.05, pad=0.005)
@@ -248,7 +247,7 @@ def plot_composite(config, args):
 
     fontsize = 12
     if args.horizontal:
-        fig = plt.figure(figsize=(6 * len(models), 5), constrained_layout=True)
+        fig = plt.figure(figsize=(6 * len(models), 4.2), constrained_layout=True)
     else:
         fig = plt.figure(figsize=(5, len(models)*3.5), constrained_layout=True)
     fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
@@ -261,7 +260,7 @@ def plot_composite(config, args):
                 s = model.upper()
             else:
                 s = ''
-            title = f"{s}{time.replace('_', ' ')}"
+            title = f"{time.replace('_', ' ')}"
 
             if args.horizontal:
                 ax = plt.subplot(1, len(models), 1+j)
@@ -289,7 +288,7 @@ def plot_composite(config, args):
             basemap.drawstates()
             basemap.drawcounties()
 
-            if not args.horizontal and j == 0:
+            if (not args.horizontal and j == 0) or len(models) == 1:
                 plt.title(title, fontsize=fontsize)
             if len(models) > 1 and not args.horizontal and i == 0:
                 label = model.upper()
@@ -320,9 +319,10 @@ def plot_composite(config, args):
                 t.set_bbox(dict(facecolor='lightgray',
                            alpha=0.3, edgecolor='gray'))
 
-            # pannel text labels in bottom left corner
-            plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
-                     fontweight='bold', va='bottom', ha='left', color='black')
+            if len(ids) > 1 and len(models) > 1:
+                # pannel text labels in bottom left corner
+                plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
+                        fontweight='bold', va='bottom', ha='left', color='black')
 
         filename = os.path.join(output_dir, f'{time}.png')
         fig.savefig(filename, dpi=300)
@@ -407,10 +407,10 @@ def plot_cases(config, args):
                              fontsize=fontsize, va='bottom', ha='right', color='black')
                 t.set_bbox(dict(facecolor='lightgray',
                            alpha=0.3, edgecolor='gray'))
-
-            # pannel text labels in bottom left corner
-            plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
-                     fontweight='bold', va='bottom', ha='left', color='black')
+            if len(ids) > 1 and len(models) > 1:
+                # pannel text labels in bottom left corner
+                plt.text(0.01, 0.01, f'{chr(97+(i*len(ids)+j))})', transform=ax.transAxes, fontsize=fontsize+1,
+                        fontweight='bold', va='bottom', ha='left', color='black')
 
     fraction = 0.05 if args.horizontal else 0.1
     pad = 0.005 if args.horizontal else 0.02
