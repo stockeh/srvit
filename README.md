@@ -1,9 +1,14 @@
-# (SR-ViT) Satellite to Radar Transformer
-Official implementation of *SR-ViT: Vision Transformers for Estimating Radar Reflectivity from Satellite Observations at Scale*
+## SRViT: Satellite to Radar Vision Transformer
 
 <p align="center">
-    <img src="assets/colin2.png" alt>
-    <em>Tropical Cyclone Colin</em>
+    <img src="assets/input_output_1500.png" alt width="500">
+    <br/>
+    Jason Stock, Kyle Hilburn, Imme Ebert-Uphoff, Charles Anderson
+    <br/>
+    <span>
+        [<a href='https://arxiv.org/abs/2406.16955' target="_blank" rel="noopener noreferrer">paper</a>]
+        [<a href='#citation'>citation</a>]
+    </span>
 </p>
 
 Overview of project structure:
@@ -35,3 +40,16 @@ The training scripts are available in [`scripts/`](scripts/) which call [`src/ma
 **Model Evaluation**: Evaluations are performed using the `src/*eval.py` scripts. The best model is loaded with with the arguments `--test` and `--save` and the results are saved to the `--data-dir/<out>/<experiment>` directory. Metrics are computed with [`src/results.py`](src/results.py) and sharpness with [`src/grad.py`](src/grad.py) given the model directory with saved predictions.
 
 **Token (Re)Distribution**: source code is available under [`src/dzdxutils.py`](src/dzdxutils.py) with an example of running and plotting in [`notebooks/dzdx.ipynb`](notebooks/dzdx.ipynb). It is assumed that the model has been trained and the weights are saved.
+
+<a id="citation"></a>
+### Citation
+
+```
+@inproceedings{stock2024srvit,
+  title={SRViT: Vision Transformers for Estimating Radar Reflectivity from Satellite Observations at Scale},
+  author={Stock, Jason and Hilburn, Kyle and Ebert-Uphoff, Imme and Anderson, Charles},
+  booktitle={ICML 2024 Workshop on Machine Learning for Earth System Modeling},
+  year={2024},
+  month={July}
+}
+```
