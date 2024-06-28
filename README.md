@@ -1,4 +1,4 @@
-# 🛰️ SRViT: Vision Transformers for Estimating Radar Reflectivity from Satellite Observations at Scale
+# 🛰️📡 SRViT: Vision Transformers for Estimating Radar Reflectivity from Satellite Observations at Scale
 
 <p align="center">
     <img src="assets/input_output_1500.png" alt width="500">
