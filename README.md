@@ -1,4 +1,4 @@
-## SRViT: Satellite to Radar Vision Transformer
+# 🛰️ SRViT: Vision Transformers for Estimating Radar Reflectivity from Satellite Observations at Scale
 
 <p align="center">
     <img src="assets/input_output_1500.png" alt width="500">
@@ -11,6 +11,8 @@
     </span>
 </p>
 
+**Abstract**: We introduce a transformer-based neural network to generate high-resolution (3km) synthetic radar reflectivity fields at scale from geostationary satellite imagery. This work aims to enhance short-term convective-scale forecasts of high-impact weather events and aid in data assimilation for numerical weather prediction over the United States. Compared to convolutional approaches, which have limited receptive fields, our results show improved sharpness and higher accuracy across various composite reflectivity thresholds. Additional case studies over specific atmospheric phenomena support our quantitative findings, while a novel attribution method is introduced to guide domain experts in understanding model outputs.
+
 Overview of project structure:
 - [src/](src/): models, trainer, evaluation scripts
 - [scripts/](scripts/): scripts for training and testing on SLURM
@@ -19,7 +21,7 @@ Overview of project structure:
 - [dataprep/](dataprep/): scripts to convert raw data into numpy
 - [notebooks/](notebooks/): notebooks for data exploration and visualization
 
-**Note**: pathnames need to be updated in the scripts to point to the correct directories.
+**Note**: path names need to be updated in the scripts to point to the correct directories.
 
 ### Data Preparation
 
