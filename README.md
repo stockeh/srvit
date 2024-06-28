@@ -43,6 +43,12 @@ The training scripts are available in [`scripts/`](scripts/) which call [`src/ma
 
 **Token (Re)Distribution**: source code is available under [`src/dzdxutils.py`](src/dzdxutils.py) with an example of running and plotting in [`notebooks/dzdx.ipynb`](notebooks/dzdx.ipynb). It is assumed that the model has been trained and the weights are saved.
 
+<p align="center">
+    <img src="assets/redistribution_hz_2022-07-02_06_00Z.png" alt width="500">
+    <br/>
+    <em>Token (Re)Distribution</em>
+</p>
+
 <a id="citation"></a>
 ### Citation
 
